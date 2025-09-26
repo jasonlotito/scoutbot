@@ -1,0 +1,63 @@
+{
+  "name": "blackjackbot",
+  "version": "1.0.0",
+  "description": "A Twitch chat bot for playing blackjack games",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux",
+    "test": "node test.js && node test-twurple.js && node test-electron.js && node test-config.js && node test-modal.js && node test-stats.js",
+    "test-cli": "node index.js"
+  },
+  "keywords": [
+    "twitch",
+    "bot",
+    "blackjack",
+    "chat",
+    "game"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@twurple/auth": "^7.4.0",
+    "@twurple/chat": "^7.4.0",
+    "dotenv": "^17.2.2",
+    "electron-store": "^10.1.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.blackjackbot.app",
+    "productName": "Twitch Blackjack Bot",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dashboard.html",
+      "dashboard.js",
+      "styles.css",
+      "src/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

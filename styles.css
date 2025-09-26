@@ -310,6 +310,36 @@ body {
     font-size: 14px;
 }
 
+/* Info Banner */
+.info-banner {
+    background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+    border: 1px solid #90caf9;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.info-banner::before {
+    content: "ℹ️";
+    position: absolute;
+    left: 16px;
+    top: 12px;
+    font-size: 16px;
+}
+
+.info-banner p {
+    margin: 0;
+    padding-left: 24px;
+    color: #1565c0;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.info-banner strong {
+    color: #0d47a1;
+}
+
 /* Authentication Wizard */
 .auth-wizard {
     max-width: 600px;

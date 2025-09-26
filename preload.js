@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveAuthConfig: (config) => ipcRenderer.invoke('save-auth-config', config),
     getSettingsInfo: () => ipcRenderer.invoke('get-settings-info'),
     clearSettingsBackup: () => ipcRenderer.invoke('clear-settings-backup'),
+    getAdSettingsInfo: () => ipcRenderer.invoke('get-ad-settings-info'),
 
     onStatusUpdate: (callback) => ipcRenderer.on('status-update', callback),
     removeStatusListener: (callback) => ipcRenderer.removeListener('status-update', callback),

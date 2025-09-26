@@ -308,10 +308,26 @@ ipcMain.handle('start-bot', async () => {
         }
 
         bot = new TwitchBlackjackBot(config);
-        
+
+        // Load advertisement configuration from settings
+        if (store) {
+            const savedAdConfig = store.get('adConfig', null);
+            if (savedAdConfig) {
+                console.log('📢 Loading advertisement config from settings...');
+                bot.setAdConfig(savedAdConfig);
+                console.log('✅ Advertisement config loaded');
+            } else {
+                console.log('📢 Using default advertisement config');
+                bot.setAdConfig(getDefaultAdConfig());
+            }
+        } else {
+            console.log('📢 Using default advertisement config (no settings store)');
+            bot.setAdConfig(getDefaultAdConfig());
+        }
+
         // Set up bot event listeners
         setupBotEventListeners();
-        
+
         await bot.connect();
         
         botStatus.connected = true;
@@ -405,7 +421,7 @@ ipcMain.handle('get-ad-config', () => {
     }
 });
 
-ipcMain.handle('set-ad-config', (event, config) => {
+ipcMain.handle('set-ad-config', async (event, config) => {
     try {
         console.log('💾 Saving advertisement configuration...');
 
@@ -420,6 +436,9 @@ ipcMain.handle('set-ad-config', (event, config) => {
 
             store.set('adConfig', adConfigToSave);
             console.log('✅ Advertisement config saved to OS settings');
+
+            // Also save to .env file for compatibility
+            await saveAdConfigToEnv(adConfigToSave);
         }
 
         // Also update running bot if available
@@ -469,6 +488,25 @@ ipcMain.handle('clear-settings-backup', () => {
 
         store.delete('credentials');
         return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-ad-settings-info', () => {
+    try {
+        if (!store) {
+            return { success: false, error: 'Settings store not initialized' };
+        }
+
+        const adConfig = store.get('adConfig', null);
+        return {
+            success: true,
+            hasSettings: !!adConfig,
+            lastUpdated: adConfig ? adConfig.lastUpdated : null,
+            currentConfig: adConfig || getDefaultAdConfig(),
+            settingsPath: store.path
+        };
     } catch (error) {
         return { success: false, error: error.message };
     }
@@ -577,6 +615,59 @@ function loadConfigFromSettings() {
     } catch (error) {
         console.warn('Failed to load from OS settings:', error.message);
         return null;
+    }
+}
+
+// Helper function to get default advertisement configuration
+function getDefaultAdConfig() {
+    return {
+        enabled: process.env.AD_ENABLED !== 'false', // Default to true unless explicitly disabled
+        intervalMinutes: parseInt(process.env.AD_INTERVAL_MINUTES) || 5,
+        minMessagesSinceLastAd: parseInt(process.env.AD_MIN_MESSAGES) || 10
+    };
+}
+
+// Helper function to save advertisement config to .env file
+async function saveAdConfigToEnv(adConfig) {
+    try {
+        if (!fs.existsSync('.env')) {
+            console.log('⚠️ No .env file found, skipping ad config save to .env');
+            return { success: true };
+        }
+
+        let envContent = fs.readFileSync('.env', 'utf8');
+
+        // Update or add advertisement settings
+        const adEnabled = adConfig.enabled ? 'true' : 'false';
+        const adInterval = adConfig.intervalMinutes.toString();
+        const adMinMessages = adConfig.minMessagesSinceLastAd.toString();
+
+        // Update existing values or add new ones
+        if (envContent.includes('AD_ENABLED=')) {
+            envContent = envContent.replace(/^AD_ENABLED=.*$/m, `AD_ENABLED=${adEnabled}`);
+        } else {
+            envContent += `\n# Advertisement Settings\nAD_ENABLED=${adEnabled}`;
+        }
+
+        if (envContent.includes('AD_INTERVAL_MINUTES=')) {
+            envContent = envContent.replace(/^AD_INTERVAL_MINUTES=.*$/m, `AD_INTERVAL_MINUTES=${adInterval}`);
+        } else {
+            envContent += `\nAD_INTERVAL_MINUTES=${adInterval}`;
+        }
+
+        if (envContent.includes('AD_MIN_MESSAGES=')) {
+            envContent = envContent.replace(/^AD_MIN_MESSAGES=.*$/m, `AD_MIN_MESSAGES=${adMinMessages}`);
+        } else {
+            envContent += `\nAD_MIN_MESSAGES=${adMinMessages}`;
+        }
+
+        fs.writeFileSync('.env', envContent);
+        console.log('✅ Advertisement config saved to .env file');
+
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Error saving ad config to .env:', error);
+        return { success: false, error: error.message };
     }
 }
 

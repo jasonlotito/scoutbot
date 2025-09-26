@@ -474,7 +474,8 @@ class Dashboard {
             const result = await window.electronAPI.setAdConfig(config);
 
             if (result.success) {
-                this.showToast('Advertisement settings saved successfully!', 'success');
+                const botStatus = this.botStatus?.connected ? 'Applied to running bot' : 'Saved - will apply when bot starts';
+                this.showToast(`Advertisement settings saved successfully! ${botStatus}`, 'success');
                 this.closeAdModal();
                 this.updateAdSystem(); // Refresh the display
             } else {

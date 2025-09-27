@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 data
+package-lock.json
 # Environment variables
 .env
 

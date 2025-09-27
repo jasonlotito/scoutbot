@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store').default;
@@ -41,9 +41,9 @@ function createWindow() {
     }
 
     // Send initial status and check authentication
-    mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.once('did-finish-load', async () => {
         sendStatusUpdate();
-        checkAuthenticationOnStartup();
+        await checkAuthenticationOnStartup();
     });
 }
 
@@ -73,17 +73,30 @@ app.on('activate', () => {
 });
 
 // Check if authentication is needed on startup
-function checkAuthenticationOnStartup() {
-    let config = {
-        clientId: process.env.TWITCH_CLIENT_ID,
-        clientSecret: process.env.TWITCH_CLIENT_SECRET,
-        accessToken: process.env.TWITCH_ACCESS_TOKEN,
-        refreshToken: process.env.TWITCH_REFRESH_TOKEN,
-        channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()).filter(ch => ch) : []
-    };
+async function checkAuthenticationOnStartup() {
+    // First try to load from secure storage
+    let config = await SecureCredentials.loadCredentials();
+
+    // If no secure credentials, try .env file
+    if (!config || !config.clientId) {
+        config = {
+            clientId: process.env.TWITCH_CLIENT_ID,
+            clientSecret: process.env.TWITCH_CLIENT_SECRET,
+            accessToken: process.env.TWITCH_ACCESS_TOKEN,
+            refreshToken: process.env.TWITCH_REFRESH_TOKEN,
+            channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()).filter(ch => ch) : []
+        };
+
+        // If we found credentials in .env, migrate them to secure storage
+        if (config.clientId && config.clientId !== 'your_client_id_here') {
+            console.log('🔄 Found .env credentials, migrating to secure storage...');
+            await SecureCredentials.saveCredentials(config);
+        }
+    }
 
     // Check if any required credentials are missing
-    const needsAuth = !config.clientId ||
+    const needsAuth = !config ||
+                     !config.clientId ||
                      !config.clientSecret ||
                      !config.accessToken ||
                      !config.refreshToken ||
@@ -93,38 +106,41 @@ function checkAuthenticationOnStartup() {
                      config.refreshToken === 'your_refresh_token_here';
 
     if (needsAuth) {
-        console.log('🔐 Authentication required - checking OS settings backup...');
+        console.log('🔐 Authentication required - checking secure storage backup...');
 
-        // Try to recover from OS settings
+        // Try to migrate old credentials first
+        const migrated = await SecureCredentials.migrateCredentials();
+        if (migrated) {
+            config = await SecureCredentials.loadCredentials();
+            if (config && config.clientId && config.accessToken) {
+                console.log('✅ Credentials migrated and loaded from secure storage');
+                mainWindow.webContents.send('credentials-recovered');
+                return;
+            }
+        }
+
+        // Try to recover from old OS settings format
         const savedSettings = loadConfigFromSettings();
         if (savedSettings && savedSettings.clientId && savedSettings.accessToken) {
-            console.log('📱 Found credentials in OS settings - attempting recovery...');
+            console.log('📱 Found credentials in old OS settings - migrating to secure storage...');
 
-            // Try to restore .env file from OS settings
-            saveConfigToEnv(savedSettings).then(result => {
-                if (result.success) {
-                    console.log('✅ Credentials recovered from OS settings');
-                    // Reload environment variables
-                    delete require.cache[require.resolve('dotenv')];
-                    require('dotenv').config();
-
-                    // Send success message to renderer
-                    mainWindow.webContents.send('credentials-recovered');
-                } else {
-                    console.log('❌ Failed to recover credentials - opening wizard');
-                    mainWindow.webContents.send('show-auth-wizard');
-                }
-            }).catch(error => {
-                console.error('❌ Error during credential recovery:', error);
-                mainWindow.webContents.send('show-auth-wizard');
-            });
-        } else {
-            console.log('🔐 No backup credentials found - opening wizard');
-            // Send message to renderer to show auth wizard
-            mainWindow.webContents.send('show-auth-wizard');
+            const migrateResult = await SecureCredentials.saveCredentials(savedSettings);
+            if (migrateResult.success) {
+                console.log('✅ Credentials migrated to secure storage');
+                // Clean up old format
+                store.delete('credentials');
+                mainWindow.webContents.send('credentials-recovered');
+                return;
+            }
         }
+
+        console.log('🔐 No backup credentials found - opening wizard');
+        mainWindow.webContents.send('show-auth-wizard');
     } else {
         console.log('✅ Authentication credentials found and valid');
+
+        // Store current config globally for bot startup
+        global.currentCredentials = config;
     }
 }
 
@@ -137,23 +153,37 @@ function getAuthService() {
 }
 
 // IPC handlers
-ipcMain.handle('get-config', () => {
-    // Reload environment variables to get latest values
-    require('dotenv').config();
+ipcMain.handle('get-config', async () => {
+    // Try to load from secure storage first
+    let config = await SecureCredentials.loadCredentials();
+
+    if (!config || !config.clientId) {
+        // Fallback to .env file
+        require('dotenv').config();
+        config = {
+            clientId: process.env.TWITCH_CLIENT_ID || '',
+            clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+            accessToken: process.env.TWITCH_ACCESS_TOKEN || '',
+            refreshToken: process.env.TWITCH_REFRESH_TOKEN || '',
+            channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()).filter(ch => ch) : []
+        };
+    }
 
     return {
-        clientId: process.env.TWITCH_CLIENT_ID || '',
-        clientSecret: process.env.TWITCH_CLIENT_SECRET ? '***configured***' : '',
-        accessToken: process.env.TWITCH_ACCESS_TOKEN ? '***configured***' : '',
-        refreshToken: process.env.TWITCH_REFRESH_TOKEN ? '***configured***' : '',
-        channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()).filter(ch => ch) : [],
+        clientId: config.clientId,
+        clientSecret: config.clientSecret ? '***configured***' : '',
+        accessToken: config.accessToken ? '***configured***' : '',
+        refreshToken: config.refreshToken ? '***configured***' : '',
+        channels: config.channels || [],
         // Also return whether .env file exists
         envFileExists: fs.existsSync('.env'),
         // Return raw values for validation (but masked for security)
-        hasClientId: !!(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_ID !== 'your_client_id_here'),
-        hasClientSecret: !!(process.env.TWITCH_CLIENT_SECRET && process.env.TWITCH_CLIENT_SECRET !== 'your_client_secret_here'),
-        hasAccessToken: !!(process.env.TWITCH_ACCESS_TOKEN && process.env.TWITCH_ACCESS_TOKEN !== 'your_access_token_here'),
-        hasRefreshToken: !!(process.env.TWITCH_REFRESH_TOKEN && process.env.TWITCH_REFRESH_TOKEN !== 'your_refresh_token_here')
+        hasClientId: !!(config.clientId && config.clientId !== 'your_client_id_here'),
+        hasClientSecret: !!(config.clientSecret && config.clientSecret !== 'your_client_secret_here'),
+        hasAccessToken: !!(config.accessToken && config.accessToken !== 'your_access_token_here'),
+        hasRefreshToken: !!(config.refreshToken && config.refreshToken !== 'your_refresh_token_here'),
+        // Indicate storage method
+        usingSecureStorage: !!(config && config.version && config.version.startsWith('2.'))
     };
 });
 
@@ -281,15 +311,29 @@ ipcMain.handle('start-bot', async () => {
     }
 
     try {
-        // Reload environment variables to ensure they're fresh
-        require('dotenv').config({ override: true });
-        const config = {
-            clientId: process.env.TWITCH_CLIENT_ID,
-            clientSecret: process.env.TWITCH_CLIENT_SECRET,
-            accessToken: process.env.TWITCH_ACCESS_TOKEN,
-            refreshToken: process.env.TWITCH_REFRESH_TOKEN,
-            channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()) : []
-        };
+        // Load credentials from secure storage first, then fallback to .env
+        let config = await SecureCredentials.loadCredentials();
+
+        if (!config || !config.clientId) {
+            // Fallback to .env file
+            require('dotenv').config({ override: true });
+            config = {
+                clientId: process.env.TWITCH_CLIENT_ID,
+                clientSecret: process.env.TWITCH_CLIENT_SECRET,
+                accessToken: process.env.TWITCH_ACCESS_TOKEN,
+                refreshToken: process.env.TWITCH_REFRESH_TOKEN,
+                channels: process.env.CHANNELS ? process.env.CHANNELS.split(',').map(ch => ch.trim()) : []
+            };
+
+            // If we found valid .env credentials, migrate them
+            if (config.clientId && config.clientId !== 'your_client_id_here') {
+                console.log('🔄 Migrating .env credentials to secure storage...');
+                await SecureCredentials.saveCredentials(config);
+            }
+        } else if (global.currentCredentials) {
+            // Use globally stored credentials from startup check
+            config = global.currentCredentials;
+        }
 
         // Debug logging
         console.log('🔍 Bot startup config check:');
@@ -512,6 +556,45 @@ ipcMain.handle('get-ad-settings-info', () => {
     }
 });
 
+ipcMain.handle('get-security-info', async () => {
+    try {
+        const credentials = await SecureCredentials.loadCredentials();
+        const hasSecureCredentials = store ? !!store.get('secureCredentials', null) : false;
+        const hasLegacyCredentials = store ? !!store.get('credentials', null) : false;
+
+        return {
+            success: true,
+            safeStorageAvailable: safeStorage.isEncryptionAvailable(),
+            usingSecureStorage: !!(credentials && credentials.version && credentials.version.startsWith('2.')),
+            hasSecureCredentials,
+            hasLegacyCredentials,
+            storageVersion: credentials ? credentials.version : null,
+            lastUpdated: credentials ? credentials.lastUpdated : null,
+            settingsPath: store ? store.path : null
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('migrate-to-secure-storage', async () => {
+    try {
+        console.log('🔄 Manual migration to secure storage requested...');
+
+        const migrated = await SecureCredentials.migrateCredentials();
+        if (migrated) {
+            console.log('✅ Manual migration completed');
+            return { success: true, message: 'Credentials migrated to secure storage' };
+        } else {
+            console.log('ℹ️ No migration needed or migration failed');
+            return { success: false, error: 'No credentials to migrate or migration failed' };
+        }
+    } catch (error) {
+        console.error('❌ Manual migration failed:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 // Authentication wizard IPC handlers
 ipcMain.handle('open-twitch-console', async () => {
     try {
@@ -551,26 +634,31 @@ ipcMain.handle('save-auth-config', async (event, config) => {
             channels: config.channels ? config.channels.length : 0
         });
 
-        // Save to .env file
+        // Save to secure storage (primary method)
+        const secureResult = await SecureCredentials.saveCredentials(config);
+        if (!secureResult.success) {
+            console.warn('⚠️ Failed to save to secure storage:', secureResult.error);
+            // Continue with fallback methods
+        } else {
+            console.log('✅ Saved to secure storage');
+        }
+
+        // Save to .env file as backup for compatibility
         const envResult = await saveConfigToEnv(config);
         if (!envResult.success) {
-            throw new Error(`Failed to save to .env: ${envResult.error}`);
-        }
-        console.log('✅ Saved to .env file');
-
-        // Save to OS settings as backup
-        const settingsResult = await saveConfigToSettings(config);
-        if (!settingsResult.success) {
-            console.warn('⚠️ Failed to save to OS settings:', settingsResult.error);
-            // Don't fail the whole operation if OS settings fail
+            console.warn('⚠️ Failed to save to .env file:', envResult.error);
+            // Don't fail if .env save fails, secure storage is primary
         } else {
-            console.log('✅ Saved to OS settings');
+            console.log('✅ Saved to .env file (backup)');
         }
 
-        // Reload environment variables
+        // Store credentials globally for immediate use
+        global.currentCredentials = config;
+
+        // Reload environment variables for backward compatibility
         delete require.cache[require.resolve('dotenv')];
         require('dotenv').config();
-        console.log('✅ Environment variables reloaded');
+        console.log('✅ Configuration updated');
 
         return { success: true };
     } catch (error) {
@@ -617,6 +705,145 @@ function loadConfigFromSettings() {
         return null;
     }
 }
+
+// Secure credential storage using Electron's safeStorage API
+const SecureCredentials = {
+    // Save credentials securely using safeStorage
+    async saveCredentials(credentials) {
+        try {
+            if (!safeStorage.isEncryptionAvailable()) {
+                console.warn('⚠️ Encryption not available, falling back to electron-store');
+                return this.saveCredentialsToStore(credentials);
+            }
+
+            const credentialsJson = JSON.stringify({
+                clientId: credentials.clientId || '',
+                clientSecret: credentials.clientSecret || '',
+                accessToken: credentials.accessToken || '',
+                refreshToken: credentials.refreshToken || '',
+                channels: credentials.channels || [],
+                lastUpdated: new Date().toISOString(),
+                version: '2.0.0' // Version 2.0.0 indicates safeStorage format
+            });
+
+            const encryptedCredentials = safeStorage.encryptString(credentialsJson);
+
+            if (!store) {
+                throw new Error('Settings store not initialized');
+            }
+
+            // Store the encrypted buffer as base64
+            store.set('secureCredentials', encryptedCredentials.toString('base64'));
+            console.log('🔐 Credentials encrypted and saved using safeStorage');
+
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Failed to save secure credentials:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    // Load credentials securely using safeStorage
+    async loadCredentials() {
+        try {
+            if (!store) {
+                return null;
+            }
+
+            // First try to load from new secure format
+            const encryptedData = store.get('secureCredentials', null);
+            if (encryptedData) {
+                if (!safeStorage.isEncryptionAvailable()) {
+                    console.warn('⚠️ Encryption not available, cannot decrypt credentials');
+                    return this.loadCredentialsFromStore();
+                }
+
+                try {
+                    const encryptedBuffer = Buffer.from(encryptedData, 'base64');
+                    const decryptedJson = safeStorage.decryptString(encryptedBuffer);
+                    const credentials = JSON.parse(decryptedJson);
+
+                    console.log('🔐 Credentials loaded and decrypted using safeStorage');
+                    return credentials;
+                } catch (decryptError) {
+                    console.warn('⚠️ Failed to decrypt credentials, falling back to store:', decryptError.message);
+                    return this.loadCredentialsFromStore();
+                }
+            }
+
+            // Fallback to old format
+            return this.loadCredentialsFromStore();
+        } catch (error) {
+            console.error('❌ Failed to load secure credentials:', error);
+            return null;
+        }
+    },
+
+    // Fallback methods for electron-store
+    saveCredentialsToStore(credentials) {
+        try {
+            if (!store) {
+                throw new Error('Settings store not initialized');
+            }
+
+            const settingsData = {
+                clientId: credentials.clientId || '',
+                clientSecret: credentials.clientSecret || '',
+                accessToken: credentials.accessToken || '',
+                refreshToken: credentials.refreshToken || '',
+                channels: credentials.channels || [],
+                lastUpdated: new Date().toISOString(),
+                version: '1.0.0' // Version 1.0.0 indicates electron-store format
+            };
+
+            store.set('credentials', settingsData);
+            console.log('📦 Credentials saved to electron-store (fallback)');
+
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    loadCredentialsFromStore() {
+        try {
+            if (!store) {
+                return null;
+            }
+
+            const credentials = store.get('credentials', null);
+            if (credentials) {
+                console.log('📦 Credentials loaded from electron-store (fallback)');
+            }
+            return credentials;
+        } catch (error) {
+            console.warn('Failed to load from electron-store:', error.message);
+            return null;
+        }
+    },
+
+    // Migrate old credentials to new secure format
+    async migrateCredentials() {
+        try {
+            const oldCredentials = this.loadCredentialsFromStore();
+            if (oldCredentials && safeStorage.isEncryptionAvailable()) {
+                console.log('🔄 Migrating credentials to secure storage...');
+
+                const result = await this.saveCredentials(oldCredentials);
+                if (result.success) {
+                    // Remove old credentials after successful migration
+                    store.delete('credentials');
+                    console.log('✅ Credentials migrated to secure storage');
+                    return true;
+                }
+            }
+            return false;
+        } catch (error) {
+            console.error('❌ Failed to migrate credentials:', error);
+            return false;
+        }
+    }
+};
 
 // Helper function to get default advertisement configuration
 function getDefaultAdConfig() {

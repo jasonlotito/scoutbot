@@ -114,6 +114,29 @@
                 </div>
             </section>
 
+            <!-- Security Information -->
+            <section class="card security-info">
+                <h2>🔐 Security & Storage</h2>
+                <div class="security-status">
+                    <div class="security-item">
+                        <div class="security-label">Credential Storage:</div>
+                        <div class="security-value" id="storage-method">Loading...</div>
+                    </div>
+                    <div class="security-item">
+                        <div class="security-label">Encryption:</div>
+                        <div class="security-value" id="encryption-status">Loading...</div>
+                    </div>
+                    <div class="security-item">
+                        <div class="security-label">Last Updated:</div>
+                        <div class="security-value" id="credentials-updated">Loading...</div>
+                    </div>
+                </div>
+                <div class="security-actions">
+                    <button id="security-info-btn" class="btn btn-small btn-outline">View Details</button>
+                    <button id="migrate-storage-btn" class="btn btn-small" style="display: none;">Upgrade Security</button>
+                </div>
+            </section>
+
             <!-- Activity Log -->
             <section class="card activity-section">
                 <h2>Activity Log</h2>
@@ -272,6 +295,73 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" id="cancel-ad-settings">Cancel</button>
                 <button type="submit" class="btn btn-primary" id="save-ad-settings">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Information Modal -->
+    <div id="security-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔐 Security & Storage Information</h2>
+                <span class="close" id="close-security-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="security-details">
+                    <div class="security-section">
+                        <h3>Current Storage Method</h3>
+                        <div class="security-status-detail">
+                            <div class="status-item">
+                                <strong>Storage Type:</strong> <span id="detail-storage-method">Loading...</span>
+                            </div>
+                            <div class="status-item">
+                                <strong>Encryption:</strong> <span id="detail-encryption-status">Loading...</span>
+                            </div>
+                            <div class="status-item">
+                                <strong>Version:</strong> <span id="detail-storage-version">Loading...</span>
+                            </div>
+                            <div class="status-item">
+                                <strong>Last Updated:</strong> <span id="detail-last-updated">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="security-section">
+                        <h3>Security Features</h3>
+                        <div class="feature-list">
+                            <div class="feature-item">
+                                <span class="feature-icon">🔐</span>
+                                <div class="feature-info">
+                                    <strong>OS-Native Encryption</strong>
+                                    <p>Credentials encrypted using your operating system's secure storage</p>
+                                </div>
+                            </div>
+                            <div class="feature-item">
+                                <span class="feature-icon">🛡️</span>
+                                <div class="feature-info">
+                                    <strong>No Plain Text Storage</strong>
+                                    <p>Sensitive tokens are never stored in plain text files</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="security-section">
+                        <h3>Storage Locations</h3>
+                        <div class="location-list">
+                            <div class="location-item">
+                                <strong>Primary:</strong> OS Secure Storage (encrypted)
+                            </div>
+                            <div class="location-item">
+                                <strong>Settings:</strong> <span id="detail-settings-path">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="close-security-info">Close</button>
+                <button type="button" class="btn btn-primary" id="force-migrate-btn" style="display: none;">Upgrade to Secure Storage</button>
             </div>
         </div>
     </div>

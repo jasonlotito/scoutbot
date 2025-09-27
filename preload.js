@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettingsInfo: () => ipcRenderer.invoke('get-settings-info'),
     clearSettingsBackup: () => ipcRenderer.invoke('clear-settings-backup'),
     getAdSettingsInfo: () => ipcRenderer.invoke('get-ad-settings-info'),
+    getSecurityInfo: () => ipcRenderer.invoke('get-security-info'),
+    migrateToSecureStorage: () => ipcRenderer.invoke('migrate-to-secure-storage'),
 
     onStatusUpdate: (callback) => ipcRenderer.on('status-update', callback),
     removeStatusListener: (callback) => ipcRenderer.removeListener('status-update', callback),

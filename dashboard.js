@@ -10,6 +10,7 @@ class Dashboard {
         this.setupEventListeners();
         await this.loadConfig();
         this.startStatusUpdates();
+        await this.updateSecurityInfo();
         this.addLog('Dashboard initialized', 'success');
     }
 
@@ -34,6 +35,13 @@ class Dashboard {
         document.getElementById('close-ad-modal').addEventListener('click', () => this.closeAdModal());
         document.getElementById('cancel-ad-settings').addEventListener('click', () => this.closeAdModal());
         document.getElementById('save-ad-settings').addEventListener('click', () => this.saveAdSettings());
+
+        // Security information
+        document.getElementById('security-info-btn').addEventListener('click', () => this.openSecurityModal());
+        document.getElementById('close-security-modal').addEventListener('click', () => this.closeSecurityModal());
+        document.getElementById('close-security-info').addEventListener('click', () => this.closeSecurityModal());
+        document.getElementById('migrate-storage-btn').addEventListener('click', () => this.migrateToSecureStorage());
+        document.getElementById('force-migrate-btn').addEventListener('click', () => this.migrateToSecureStorage());
 
         // Authentication wizard
         document.getElementById('open-twitch-console').addEventListener('click', () => this.openTwitchConsole());
@@ -761,12 +769,128 @@ class Dashboard {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
-        
+
         container.appendChild(toast);
-        
+
         setTimeout(() => {
             toast.remove();
         }, 5000);
+    }
+
+    async updateSecurityInfo() {
+        try {
+            const securityInfo = await window.electronAPI.getSecurityInfo();
+
+            if (securityInfo.success) {
+                // Update main dashboard display
+                const storageMethod = document.getElementById('storage-method');
+                const encryptionStatus = document.getElementById('encryption-status');
+                const credentialsUpdated = document.getElementById('credentials-updated');
+                const migrateBtn = document.getElementById('migrate-storage-btn');
+
+                if (securityInfo.usingSecureStorage) {
+                    storageMethod.textContent = 'Secure Storage';
+                    storageMethod.className = 'security-value secure';
+                } else {
+                    storageMethod.textContent = 'Legacy Storage';
+                    storageMethod.className = 'security-value legacy';
+                    if (migrateBtn) migrateBtn.style.display = 'inline-block';
+                }
+
+                if (securityInfo.safeStorageAvailable) {
+                    encryptionStatus.textContent = 'OS-Native';
+                    encryptionStatus.className = 'security-value secure';
+                } else {
+                    encryptionStatus.textContent = 'Basic';
+                    encryptionStatus.className = 'security-value warning';
+                }
+
+                if (securityInfo.lastUpdated) {
+                    const date = new Date(securityInfo.lastUpdated);
+                    credentialsUpdated.textContent = date.toLocaleDateString();
+                } else {
+                    credentialsUpdated.textContent = 'Unknown';
+                }
+
+                // Update modal details if open
+                this.updateSecurityModalDetails(securityInfo);
+            }
+        } catch (error) {
+            console.error('Failed to update security info:', error);
+        }
+    }
+
+    updateSecurityModalDetails(securityInfo) {
+        const detailStorageMethod = document.getElementById('detail-storage-method');
+        const detailEncryptionStatus = document.getElementById('detail-encryption-status');
+        const detailStorageVersion = document.getElementById('detail-storage-version');
+        const detailLastUpdated = document.getElementById('detail-last-updated');
+        const detailSettingsPath = document.getElementById('detail-settings-path');
+        const forceMigrateBtn = document.getElementById('force-migrate-btn');
+
+        if (detailStorageMethod) {
+            detailStorageMethod.textContent = securityInfo.usingSecureStorage ?
+                'OS Secure Storage (safeStorage API)' : 'Legacy electron-store';
+        }
+
+        if (detailEncryptionStatus) {
+            detailEncryptionStatus.textContent = securityInfo.safeStorageAvailable ?
+                'OS-Native Encryption Available' : 'Basic Encryption Only';
+        }
+
+        if (detailStorageVersion) {
+            detailStorageVersion.textContent = securityInfo.storageVersion || 'Unknown';
+        }
+
+        if (detailLastUpdated) {
+            if (securityInfo.lastUpdated) {
+                const date = new Date(securityInfo.lastUpdated);
+                detailLastUpdated.textContent = date.toLocaleString();
+            } else {
+                detailLastUpdated.textContent = 'Unknown';
+            }
+        }
+
+        if (detailSettingsPath) {
+            detailSettingsPath.textContent = securityInfo.settingsPath || 'Unknown';
+        }
+
+        if (forceMigrateBtn) {
+            forceMigrateBtn.style.display = (!securityInfo.usingSecureStorage && securityInfo.hasLegacyCredentials) ?
+                'inline-block' : 'none';
+        }
+    }
+
+    openSecurityModal() {
+        const modal = document.getElementById('security-modal');
+        modal.style.display = 'block';
+        this.updateSecurityInfo(); // Refresh data when opening
+    }
+
+    closeSecurityModal() {
+        const modal = document.getElementById('security-modal');
+        modal.style.display = 'none';
+    }
+
+    async migrateToSecureStorage() {
+        try {
+            this.showToast('Migrating credentials to secure storage...', 'info');
+
+            const result = await window.electronAPI.migrateToSecureStorage();
+
+            if (result.success) {
+                this.showToast('Credentials successfully migrated to secure storage!', 'success');
+                this.updateSecurityInfo(); // Refresh display
+                this.addLog('Credentials migrated to secure storage', 'success');
+            } else {
+                this.showToast(`Migration failed: ${result.error}`, 'error');
+                this.addLog(`Migration failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Failed to migrate to secure storage:', error);
+            this.showToast(`Migration failed: ${error.message}`, 'error');
+            this.addLog(`Migration failed: ${error.message}`, 'error');
+        }
     }
 
     formatUptime(ms) {

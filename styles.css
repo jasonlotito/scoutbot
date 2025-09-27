@@ -340,6 +340,140 @@ body {
     color: #0d47a1;
 }
 
+/* Security Information Styles */
+.security-info {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+}
+
+.security-status {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.security-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.security-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    font-weight: 500;
+}
+
+.security-value {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.security-value.secure {
+    color: #00ff88;
+}
+
+.security-value.legacy {
+    color: #ffaa00;
+}
+
+.security-value.warning {
+    color: #ff6b6b;
+}
+
+.security-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Security Modal Styles */
+.security-details {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.security-section {
+    margin-bottom: 2rem;
+}
+
+.security-section h3 {
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+
+.security-status-detail {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.status-item:last-child {
+    border-bottom: none;
+}
+
+.feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.feature-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.feature-info strong {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+    display: block;
+}
+
+.feature-info p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.location-list {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.location-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e9ecef;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.location-item:last-child {
+    border-bottom: none;
+}
+
 /* Authentication Wizard */
 .auth-wizard {
     max-width: 600px;
